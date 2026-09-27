@@ -107,7 +107,7 @@ async function notifyDiscord(project) {
   }
 
   const body = {
-    content: `📢 **${AUTHOR_NAME}**님의 새로운 작품이 공개되었습니다!\n${project.url}`,
+    content: `📢 **${AUTHOR_NAME}**의 새로운 이야기가 공개되었네~ 이번엔 어떤 운명이 펼쳐질까? ⏳\n${project.url}`,
     embeds: [embed],
   };
 
