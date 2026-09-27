@@ -42,7 +42,18 @@ async function fetchProjectList(browser) {
       if (map.has(id)) continue;
       const img = a.querySelector('img');
       const title = (img && img.getAttribute('alt')) || a.textContent.trim() || '제목 없음';
-      map.set(id, { id, title, url: `https://playentry.org/project/${id}` });
+      let thumbnail = img
+        ? img.getAttribute('src') || img.getAttribute('data-src') || ''
+        : '';
+      if (thumbnail && thumbnail.startsWith('/')) {
+        thumbnail = 'https://playentry.org' + thumbnail;
+      }
+      map.set(id, {
+        id,
+        title,
+        url: `https://playentry.org/project/${id}`,
+        thumbnail,
+      });
     }
     return Array.from(map.values());
   });
@@ -52,10 +63,20 @@ async function fetchProjectList(browser) {
 }
 
 async function notifyDiscord(project) {
+  const embed = {
+    title: project.title,
+    url: project.url,
+    color: 0x21c25e,
+  };
+  if (project.thumbnail) {
+    embed.image = { url: project.thumbnail };
+  }
+
   const body = {
     content: `📢 **${AUTHOR_NAME}**님의 새로운 작품이 공개되었습니다!\n${project.url}`,
-    embeds: [{ title: project.title, url: project.url, color: 0x21c25e }],
+    embeds: [embed],
   };
+
   const res = await fetch(WEBHOOK_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
