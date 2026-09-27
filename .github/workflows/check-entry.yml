@@ -1,0 +1,30 @@
+name: 엔트리 신작 확인
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: node check-once.js
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ENTRY_PROFILE_URL: ${{ vars.ENTRY_PROFILE_URL }}
+          AUTHOR_NAME: ${{ vars.AUTHOR_NAME }}
+      - run: |
+          git config user.name "entry-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add seen-projects.json
+          git diff --staged --quiet || git commit -m "update"
+          git push
