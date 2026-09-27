@@ -62,13 +62,17 @@ async function fetchProjectThumbnail(browser, projectUrl) {
     await page.goto(projectUrl, { waitUntil: 'networkidle2', timeout: 60000 });
     await new Promise((r) => setTimeout(r, 1500));
 
-    const thumbnail = await page.evaluate(() => {
+    let thumbnail = await page.evaluate(() => {
       const og = document.querySelector('meta[property="og:image"]');
       if (og && og.getAttribute('content')) return og.getAttribute('content');
       const twitter = document.querySelector('meta[name="twitter:image"]');
       if (twitter && twitter.getAttribute('content')) return twitter.getAttribute('content');
       return '';
     });
+
+    if (thumbnail && thumbnail.startsWith('/')) {
+      thumbnail = 'https://playentry.org' + thumbnail;
+    }
 
     return thumbnail;
   } catch (err) {
