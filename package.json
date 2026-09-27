@@ -1,0 +1,12 @@
+{
+  "name": "entry-discord-bot",
+  "version": "1.0.0",
+  "description": "엔트리 신작 업로드를 감지해 디스코드에 자동으로 알리는 봇",
+  "main": "check-once.js",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-fetch": "^2.7.0",
+    "puppeteer": "^23.5.0"
+  }
+}
