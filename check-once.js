@@ -23,6 +23,8 @@ function saveSeen(seenSet) {
 
 async function fetchProjectList(browser) {
   const page = await browser.newPage();
+  page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
+
   await page.setUserAgent(
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
       '(KHTML, like Gecko) Chrome/120.0 Safari/537.36'
@@ -34,6 +36,7 @@ async function fetchProjectList(browser) {
   const projects = await page.evaluate(() => {
     const anchors = Array.from(document.querySelectorAll('a[href^="/project/"]'));
     const map = new Map();
+    let debugPrinted = false;
     for (const a of anchors) {
       const href = a.getAttribute('href') || '';
       const match = href.match(/^\/project\/([a-f0-9]{24})/i);
@@ -41,6 +44,12 @@ async function fetchProjectList(browser) {
       const id = match[1];
       if (map.has(id)) continue;
       const img = a.querySelector('img');
+
+      if (!debugPrinted && img) {
+        console.log('DEBUG img.outerHTML:', img.outerHTML);
+        debugPrinted = true;
+      }
+
       const title = (img && img.getAttribute('alt')) || a.textContent.trim() || '제목 없음';
       let thumbnail = img
         ? img.getAttribute('src') || img.getAttribute('data-src') || ''
