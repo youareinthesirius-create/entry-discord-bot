@@ -40,9 +40,7 @@ async function fetchProjectList(browser) {
       if (!match) continue;
       const id = match[1];
       if (map.has(id)) continue;
-      const img = a.querySelector('img');
-      const title = (img && img.getAttribute('alt')) || a.textContent.trim() || '제목 없음';
-      map.set(id, { id, title, url: `https://playentry.org/project/${id}` });
+      map.set(id, { id, url: `https://playentry.org/project/${id}` });
     }
     return Array.from(map.values());
   });
@@ -51,8 +49,8 @@ async function fetchProjectList(browser) {
   return projects;
 }
 
-// 작품 상세 페이지에서 대표 이미지(og:image)를 가져오는 함수
-async function fetchProjectThumbnail(browser, projectUrl) {
+// 작품 상세 페이지에서 제목(og:title)과 대표 이미지(og:image)를 가져오는 함수
+async function fetchProjectDetails(browser, projectUrl) {
   const page = await browser.newPage();
   try {
     await page.setUserAgent(
@@ -62,22 +60,37 @@ async function fetchProjectThumbnail(browser, projectUrl) {
     await page.goto(projectUrl, { waitUntil: 'networkidle2', timeout: 60000 });
     await new Promise((r) => setTimeout(r, 1500));
 
-    let thumbnail = await page.evaluate(() => {
-      const og = document.querySelector('meta[property="og:image"]');
-      if (og && og.getAttribute('content')) return og.getAttribute('content');
-      const twitter = document.querySelector('meta[name="twitter:image"]');
-      if (twitter && twitter.getAttribute('content')) return twitter.getAttribute('content');
-      return '';
+    const details = await page.evaluate(() => {
+      const getMeta = (selector) => {
+        const el = document.querySelector(selector);
+        return el ? el.getAttribute('content') : '';
+      };
+
+      let title =
+        getMeta('meta[property="og:title"]') ||
+        getMeta('meta[name="twitter:title"]') ||
+        (document.querySelector('h1') && document.querySelector('h1').textContent.trim()) ||
+        document.title ||
+        '';
+
+      let thumbnail =
+        getMeta('meta[property="og:image"]') || getMeta('meta[name="twitter:image"]') || '';
+
+      return { title, thumbnail };
     });
 
-    if (thumbnail && thumbnail.startsWith('/')) {
-      thumbnail = 'https://playentry.org' + thumbnail;
+    if (details.thumbnail && details.thumbnail.startsWith('/')) {
+      details.thumbnail = 'https://playentry.org' + details.thumbnail;
     }
 
-    return thumbnail;
+    // 제목 끝에 붙는 "| 엔트리" 같은 사이트명 제거
+    details.title = details.title.replace(/\s*[|\-–]\s*엔트리.*$/i, '').trim();
+    if (!details.title) details.title = '제목 없음';
+
+    return details;
   } catch (err) {
-    console.error('썸네일 가져오기 실패:', err.message);
-    return '';
+    console.error('상세정보 가져오기 실패:', err.message);
+    return { title: '제목 없음', thumbnail: '' };
   } finally {
     await page.close();
   }
@@ -139,10 +152,11 @@ async function main() {
   }
 
   for (const project of newOnes.reverse()) {
+    const details = await fetchProjectDetails(browser, project.url);
+    project.title = details.title;
+    project.thumbnail = details.thumbnail;
     console.log('새 작품 발견:', project.title, project.url);
-    const thumbnail = await fetchProjectThumbnail(browser, project.url);
-    console.log('가져온 썸네일:', thumbnail || '(없음)');
-    project.thumbnail = thumbnail;
+    console.log('가져온 썸네일:', project.thumbnail || '(없음)');
     await notifyDiscord(project);
     seen.add(project.id);
   }
