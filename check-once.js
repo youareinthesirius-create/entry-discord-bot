@@ -23,8 +23,6 @@ function saveSeen(seenSet) {
 
 async function fetchProjectList(browser) {
   const page = await browser.newPage();
-  page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
-
   await page.setUserAgent(
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
       '(KHTML, like Gecko) Chrome/120.0 Safari/537.36'
@@ -36,7 +34,6 @@ async function fetchProjectList(browser) {
   const projects = await page.evaluate(() => {
     const anchors = Array.from(document.querySelectorAll('a[href^="/project/"]'));
     const map = new Map();
-    let debugPrinted = false;
     for (const a of anchors) {
       const href = a.getAttribute('href') || '';
       const match = href.match(/^\/project\/([a-f0-9]{24})/i);
@@ -44,31 +41,42 @@ async function fetchProjectList(browser) {
       const id = match[1];
       if (map.has(id)) continue;
       const img = a.querySelector('img');
-
-      if (!debugPrinted && img) {
-        console.log('DEBUG img.outerHTML:', img.outerHTML);
-        debugPrinted = true;
-      }
-
       const title = (img && img.getAttribute('alt')) || a.textContent.trim() || '제목 없음';
-      let thumbnail = img
-        ? img.getAttribute('src') || img.getAttribute('data-src') || ''
-        : '';
-      if (thumbnail && thumbnail.startsWith('/')) {
-        thumbnail = 'https://playentry.org' + thumbnail;
-      }
-      map.set(id, {
-        id,
-        title,
-        url: `https://playentry.org/project/${id}`,
-        thumbnail,
-      });
+      map.set(id, { id, title, url: `https://playentry.org/project/${id}` });
     }
     return Array.from(map.values());
   });
 
   await page.close();
   return projects;
+}
+
+// 작품 상세 페이지에서 대표 이미지(og:image)를 가져오는 함수
+async function fetchProjectThumbnail(browser, projectUrl) {
+  const page = await browser.newPage();
+  try {
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+        '(KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+    );
+    await page.goto(projectUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const thumbnail = await page.evaluate(() => {
+      const og = document.querySelector('meta[property="og:image"]');
+      if (og && og.getAttribute('content')) return og.getAttribute('content');
+      const twitter = document.querySelector('meta[name="twitter:image"]');
+      if (twitter && twitter.getAttribute('content')) return twitter.getAttribute('content');
+      return '';
+    });
+
+    return thumbnail;
+  } catch (err) {
+    console.error('썸네일 가져오기 실패:', err.message);
+    return '';
+  } finally {
+    await page.close();
+  }
 }
 
 async function notifyDiscord(project) {
@@ -109,28 +117,34 @@ async function main() {
 
   const seen = loadSeen();
   const projects = await fetchProjectList(browser);
-  await browser.close();
 
   if (seen.size === 0) {
     console.log('최초 실행: 현재 작품 목록을 기준선으로 저장합니다 (알림 없음).');
     projects.forEach((p) => seen.add(p.id));
     saveSeen(seen);
     console.log(`${seen.size}개 작품을 기준선으로 저장했습니다.`);
+    await browser.close();
     return;
   }
 
   const newOnes = projects.filter((p) => !seen.has(p.id));
   if (newOnes.length === 0) {
     console.log('새로운 작품 없음.');
+    await browser.close();
     return;
   }
 
   for (const project of newOnes.reverse()) {
     console.log('새 작품 발견:', project.title, project.url);
+    const thumbnail = await fetchProjectThumbnail(browser, project.url);
+    console.log('가져온 썸네일:', thumbnail || '(없음)');
+    project.thumbnail = thumbnail;
     await notifyDiscord(project);
     seen.add(project.id);
   }
   saveSeen(seen);
+
+  await browser.close();
 }
 
 main().catch((err) => {
